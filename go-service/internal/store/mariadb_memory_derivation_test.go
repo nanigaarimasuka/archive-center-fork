@@ -619,10 +619,13 @@ func TestMariaDBVectorOutboxReplayLeaseRecoveryAndSourceFence(t *testing.T) {
 		WithArgs(item.OperationKey).
 		WillReturnRows(sqlmock.NewRows([]string{
 			"operation", "chat_session_id", "source_revision", "document_id",
-			"document_json", "embedding_ready", "required_source_state",
+			"document_json", "embedding_ready", "required_source_state", "id",
 		}).AddRow(item.Operation, item.ChatSessionID, item.SourceRevision,
 			item.DocumentID, item.DocumentJSON, item.EmbeddingReady,
-			item.RequiredSourceState))
+			item.RequiredSourceState, 1))
+	mock.ExpectQuery(`SELECT MAX\(id\)`).
+		WithArgs(item.ChatSessionID, item.DocumentID, int64(1)).
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(nil))
 	inserted, err = m.EnqueueMemoryVectorOperation(context.Background(), item)
 	if err != nil || inserted {
 		t.Fatalf("replay inserted=%v err=%v", inserted, err)

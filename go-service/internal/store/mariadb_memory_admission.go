@@ -895,7 +895,16 @@ func enqueueAdmissionVectorOperation(
 		return false, err
 	}
 	if newer > 0 {
-		return false, fmt.Errorf("memory vector refresh is superseded by a newer operation")
+		// A delete after this row (a unit retired, then desired again) needs a
+		// fresh upsert, not a refresh of the old one.
+		if rekey, err := memoryVectorUpsertKeyAfterDelete(ctx, exec, item, outboxID); err != nil {
+			return false, err
+		} else if rekey != "" {
+			next := *item
+			next.OperationKey = rekey
+			return enqueueAdmissionVectorOperation(ctx, exec, &next)
+		}
+		return false, fmt.Errorf("memory vector refresh is superseded by a newer operation (%s %s, outbox %d)", operation, documentID, outboxID)
 	}
 	targetStatus := strings.TrimSpace(item.Status)
 	if targetStatus == "" {
@@ -917,6 +926,12 @@ func enqueueAdmissionVectorOperation(
 		return false, err
 	} else if affected != 1 {
 		return false, ErrMemoryReprocessingLeased
+	}
+	switch status {
+	case "pending", "retryable", "needs_embedding":
+		// It was waiting already; the refresh did not queue it.
+	default:
+		RecordMemoryVectorOperation(ctx, item.OperationKey)
 	}
 	return true, nil
 }

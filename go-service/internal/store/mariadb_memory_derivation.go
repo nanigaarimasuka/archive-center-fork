@@ -1177,14 +1177,22 @@ func enqueueMemoryVectorOperation(ctx context.Context, exec memoryDerivationSQLE
 	if preciseMemoryDuplicateKeyError(err) {
 		var operation, sid, revision, documentID, existingJSON, requiredSourceState string
 		var embeddingReady bool
+		var existingID int64
 		if queryErr := exec.QueryRowContext(ctx, `
 			SELECT operation, chat_session_id, source_revision, document_id,
-			       COALESCE(document_json, ''), embedding_ready, required_source_state
+			       COALESCE(document_json, ''), embedding_ready, required_source_state, id
 			FROM memory_vector_outbox
 			WHERE operation_key = ?
 		`, item.OperationKey).Scan(&operation, &sid, &revision, &documentID,
-			&existingJSON, &embeddingReady, &requiredSourceState); queryErr != nil {
+			&existingJSON, &embeddingReady, &requiredSourceState, &existingID); queryErr != nil {
 			return false, queryErr
+		}
+		if rekey, rekeyErr := memoryVectorUpsertKeyAfterDelete(ctx, exec, item, existingID); rekeyErr != nil {
+			return false, rekeyErr
+		} else if rekey != "" {
+			next := *item
+			next.OperationKey = rekey
+			return enqueueMemoryVectorOperation(ctx, exec, &next)
 		}
 		if operation != item.Operation || sid != item.ChatSessionID ||
 			revision != item.SourceRevision || documentID != item.DocumentID ||
@@ -1198,6 +1206,7 @@ func enqueueMemoryVectorOperation(ctx context.Context, exec memoryDerivationSQLE
 	if err != nil {
 		return false, err
 	}
+	RecordMemoryVectorOperation(ctx, item.OperationKey)
 	return true, nil
 }
 
