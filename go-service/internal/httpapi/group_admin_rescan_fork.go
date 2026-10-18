@@ -3,7 +3,26 @@ package httpapi
 import (
 	"context"
 	"time"
+
+	"github.com/risulongmemory/archive-center-go/internal/store"
 )
+
+// adminRescanMismatchAlreadyDerived reports whether a turn whose stored chat
+// text differs from its source revision is already fully derived from that
+// revision. "원문만 반영하기" changes only the chat text and keeps what was
+// derived, so such a turn is skipped as complete instead of failed; a turn
+// that still needs deriving keeps the mismatch failure.
+func (s *Server) adminRescanMismatchAlreadyDerived(ctx context.Context, sourceWriter store.SourceRevisionStore, sid string, candidate store.MemorySourceRevision, eligible bool) bool {
+	if !eligible || sourceWriter == nil {
+		return false
+	}
+	source, err := sourceWriter.GetSourceRevision(ctx, sid, candidate.SourceRevision)
+	if err != nil || source == nil {
+		return false
+	}
+	complete, err := s.adminRescanSourceProjectionComplete(ctx, source)
+	return err == nil && complete
+}
 
 // addHierarchyFailed records a range whose LLM summary failed. Nothing is
 // saved for it, so the next run finds the range missing and tries again.

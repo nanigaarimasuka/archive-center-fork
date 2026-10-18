@@ -350,7 +350,8 @@ func (s *Server) runAdminRescanWithProgress(ctx context.Context, sid string, req
 			}
 			if len(candidates) == 1 &&
 				(sanitizeCriticStorageText(candidates[0].UserContent) != sanitizeCriticStorageText(roleMap["user"]) ||
-					sanitizeCriticStorageText(candidates[0].AssistantContent) != sanitizeCriticStorageText(roleMap["assistant"])) {
+					sanitizeCriticStorageText(candidates[0].AssistantContent) != sanitizeCriticStorageText(roleMap["assistant"])) &&
+				!s.adminRescanMismatchAlreadyDerived(ctx, sourceWriter, sid, candidates[0], req.CanonicalRawReplay && !forceDerivedRebuild) {
 				failed++
 				failedTurns = append(failedTurns, map[string]any{
 					"turn_index": turn,
